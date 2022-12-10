@@ -1,5 +1,4 @@
 import pandas as pd
-import math
 
 
 class ParserTaskToTable:
@@ -19,8 +18,6 @@ class ParserTaskToTable:
         additional = 0
         for line in expression_lines:
             coefficients, value, equals = self.get_coefficients(line)
-            coefficients = [c * math.copysign(1, value) for c in coefficients]
-            value = value * math.copysign(1, value)
             if not equals:
                 additional += 1
                 constraint_expressions_not_eq.append(Expression(coefficients, value, equals))

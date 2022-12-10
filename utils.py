@@ -1,5 +1,6 @@
 import pandas as pd
 import math
+import numpy as np
 
 
 class ParserTaskToTable:
@@ -27,17 +28,20 @@ class ParserTaskToTable:
             else:
                 constraint_expressions_eq.append(Expression(coefficients, value, equals))
         table = []
+        i = base_vars + 1
         for exp in constraint_expressions_eq:
-            table.append(exp.coefficients + [0] * additional + [exp.value])
+            table.append(exp.coefficients + [0] * additional + [exp.value] + [i])
+            i += 1
         var_n = base_vars
         for exp in constraint_expressions_not_eq:
-            tmp = exp.coefficients + [0] * additional + [exp.value]
+            tmp = exp.coefficients + [0] * additional + [exp.value] + [i]
+            i += 1
             if var_n < len(tmp):
                 tmp[var_n] = 1
                 var_n += 1
             table.append(tmp)
 
-        table.append(obj_func.coefficients + [0] * additional + [obj_func.value])
+        table.append(obj_func.coefficients + [0] * additional + [obj_func.value] + [None])
         return table
 
     def get_coefficients(self, constr):
@@ -63,7 +67,7 @@ class ParserTaskToTable:
         return coefficients
 
     def to_dataframe(self):
-        columns = ["x_" + str(i + 1) for i in range(self.vars - 1)] + ["z"]
+        columns = ["x_" + str(i + 1) for i in range(self.vars -2)] + ["z"] + ["basis"]
         return pd.DataFrame(self.table, columns=columns)
 
 

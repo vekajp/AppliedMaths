@@ -15,17 +15,11 @@ class Simplex:
     def optimize(self):
         A, b, c, minimize = Parser(self.constraints, self.objective).get_matrixes()
         tableau, base_vars = TableauUtils().get_initial_tableau(A, b, c, self.minimize)
-        print(tableau)
         try:
             tableau = self.simplex(tableau)
         except Exception as e:
             print(e.args)
             return None, []
-
-        # if tableau[0, 1] != 0:
-        #     self.feasible = False
-        #     print("Problem Infeasible; No Solution")
-        #     return None, []
 
         tableau = TableauUtils().remove_redundant_variables(tableau, base_vars)
 

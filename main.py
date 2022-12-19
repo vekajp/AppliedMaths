@@ -1,8 +1,11 @@
-from utils import ParserTaskToTable
+from simplex import *
 
-file = open("src/input.txt")
-obj_func = file.readline()
-constraints = file.readline()
-
-parser = ParserTaskToTable(constraints, obj_func)
-print(parser.to_dataframe())
+input_file = open("src/input.txt")
+output_file = open("src/out.txt", 'w')
+while input_file.readline():
+    obj_func = input_file.readline()
+    constraints = input_file.readline()
+    simplex = Simplex(constraints, obj_func)
+    x, ans = simplex.optimize()
+    output_file.write(str(x) + '\n')
+    output_file.write(str(ans) + '\n\n')

@@ -8,7 +8,7 @@ class Simplex:
         self.constraints = constraints
         self.objective = objective
         self.minimize = "min" in objective
-        # Предполагаем что задача не решена, но может быть решенной.
+        # Предполагаем что задача не решена, но может быть решенной
         self.bounded = True
         self.feasible = False
 

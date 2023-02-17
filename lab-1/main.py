@@ -1,7 +1,7 @@
 from simplex import *
 from utils import *
 
-parser = Parser("src/input.txt")
+parser = Parser("./lab-1/src/input.txt")
 tables = parser.get_tables()
 solver = SimplexSolver(verbose=False)
 count = 1

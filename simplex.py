@@ -1,86 +1,158 @@
-import numpy as np
-import pandas as pd
 from utils import *
+import itertools
 
 
-class Simplex:
-    def __init__(self, constraints, objective):
-        self.constraints = constraints
-        self.objective = objective
-        self.minimize = "min" in objective
-        # Предполагаем что задача не решена, но может быть решенной.
-        self.bounded = True
-        self.feasible = False
+class SimplexSolver:
+    def __init__(self, eps=1e-8, max_iter=1000, verbose=False):
+        self.eps = eps
+        self.max_iter = max_iter
+        self.verbose = verbose
+        self.basis = None
+        self.tableau = None
 
-    def optimize(self):
-        # Получаем матрицы из ввода
-        A, b, c, minimize = Parser(self.constraints, self.objective).get_matrixes()
-        # Соединяем матрицы в табличку для вычислений
-        tableau, base_vars = TableauUtils().get_initial_tableau(A, b, c, self.minimize)
-        # Оптимизируем
-        try:
-            tableau = self.simplex(tableau)
-        except Exception as e:
-            print(e.args)
-            return None, []
+    def solve(self, table: Tableau):
+        if not table.solvable:
+            print("No solution")
+            return [None, None]
 
-        # Убираем переменные, которые добавили для приведения задачи к каноническому ввиду
-        tableau = TableauUtils().remove_redundant_variables(tableau, base_vars)
+        self.tableau = table
+        self.get_first_plan(table.start_point)
 
-        # Восстанавливаем оптимизируемую функцию в абличке
-        tableau = TableauUtils().restore_tableau(tableau, base_vars, minimize)
+        if self.basis is None:
+            return None
 
-        # Снова оптимизируем
-        try:
-            tableau = self.simplex(tableau)
-        except Exception as e:
-            print(e.args)
-            return None, []
+        return self.find_solution()
 
-        # Собираем ответ
-        x = np.array([0] * len(c), dtype=float)
-        for key in range(1, (len(tableau))):
-            if tableau[key, 0] < len(c):
-                x[int(tableau[key, 0])] = tableau[key, 1]
+    def get_first_plan(self, start_point):
+        if self.verbose:
+            print("Try to get first plan:")
 
-        ans = round(x.dot(c), 3)
-        return x, ans
-
-    def simplex(self, tableau):
-        while True:
-            optimal = self.optimal(tableau)
-            if optimal:
-                break
-            row, column = self.pivot_index(tableau)
-            for element in tableau[1:, column]:
-                if element != 0:
-                    self.bounded = True
-            if not self.bounded:
-                raise Exception("Unbounded")
-
-            tableau = pivot(tableau, row, column)
-            tableau[row, 0] = column - 2
-        return tableau
-
-    # Оптимальный элемент для ввода в базис
-    def pivot_index(self, tableau):
-        if self.minimize:
-            column = tableau[0, 2:].tolist().index(np.amin(tableau[0, 2:])) + 2
+        if start_point is None:
+            self.basis = self.find_first_basis()
         else:
-            column = tableau[0, 2:].tolist().index(np.amax(tableau[0, 2:])) + 2
-        minimum = 1000000
-        row = -1
-        for i in range(1, len(tableau)):
-            if tableau[i, column] > 0:
-                val = tableau[i, 1] / tableau[i, column]
-                if val < minimum:
-                    minimum = val
-                    row = i
-        return row, column
+            self.basis = self.compose_basis(start_point)
 
-    # Проверяем, можно ли еще оптимизировать
-    def optimal(self, tableau):
-        if not self.minimize:
-            return np.max(tableau[0, 2:]) <= 0
+    def find_first_basis(self):
+        basis = {}
+        for i in range(self.tableau.row_n - 1):
+            try:
+                idx = list(self.tableau.table[i][:-1]).index(1) + 1
+            except ValueError:
+                idx = 0
+            if idx == 0 or list(basis.values()).count(idx) > 0:
+                idx = 0
+                for j in range(self.tableau.col_n - 1):
+                    el = self.tableau.table[i][j]
+                    if el > 0 and list(basis.values()).count(j + 1) == 0:
+                        idx = j + 1
+                        break
+            basis[i] = idx
+            self.adjust_table_to_basis(i, idx - 1)
+        return basis
+
+    def compose_basis(self, start_point):
+        basis = {}
+        basis_pos = {}
+        for i in range(len(start_point)):
+            col = i
+            if start_point[i] > 0:
+                basis_pos[i] = set()
+                for j in range(self.tableau.row_n - 1):
+                    if list(basis.keys()).count(j) == 0 and self.tableau.table[j][col] > 0:
+                        basis_pos[i].add(j)
+                if len(basis_pos[i]) == 0:
+                    print("No solution")
+                    return None
+
+        return self.select_basis(basis_pos)
+
+    def select_basis(self, basis_pos):
+        product = itertools.product(*basis_pos.values())
+        columns = list(basis_pos.keys())
+        basis_pos = []
+        for basis in product:
+            if self.basis_is_fine(basis):
+                basis_pos.append(basis)
+
+        for pos in basis_pos:
+            rows = list(pos)
+            basis = {}
+            for i in range(len(columns)):
+                basis[rows[i]] = columns[i] + 1
+            if self.basis_is_valid(basis):
+                return basis
+
+        return None
+
+    def adjust_table_to_basis(self, row, col, value=1):
+        el = self.tableau.table[row][col]
+        if el != 1 and col != -1:
+            self.tableau.table[row] = [j / el / value for j in self.tableau.table[row]]
+
+        if col != -1:
+            for j in range(self.tableau.row_n - 1):
+                if j == row:
+                    continue
+                if self.tableau.table[j][col] != 0:
+                    div = self.tableau.table[j][col] / el
+                    sustr = [k * div for k in self.tableau.table[row]]
+                    res = [self.tableau.table[j][k] - sustr[k] for k in range(len(sustr))]
+                    self.tableau.table[j] = res
+                    self.tableau.table[j][col] = 0
+
+    def find_solution(self):
+        if self.verbose:
+            print("Initial table:")
+            self.tableau.print()
+        iteration = 0
+        while not self.time_to_stop(iteration):
+            iteration += 1
+            col = self.tableau.find_main_column(self.basis)
+            row = self.tableau.find_main_row(col, self.eps)
+
+            if row == -1:
+                print("No solution")
+                return [None, None]
+
+            if self.verbose:
+                print("Pivot element: (" + str(row + 1) + ";" + str(col + 1) + ")")
+
+            self.basis[row] = col + 1
+
+            self.tableau.make_step(row, col)
+            if self.verbose:
+                self.tableau.print()
+
+        result = [0 for _ in range(self.tableau.args)]
+        result_fun = 0
+        for i in range(len(self.basis)):
+            if self.basis[i] - 1 < self.tableau.args:
+                result[self.basis[i] - 1] = self.tableau.table[i][-1]
+
+        for i in range(len(result)):
+            result_fun += self.tableau.fun_coefficients[i] * result[i]
+
+        return [result_fun, np.round(result, 4)]
+
+    def time_to_stop(self, iteration):
+        if self.tableau.minimize:
+            flag = np.min(self.tableau.table[-1][:-1]) >= 0
         else:
-            return np.min(tableau[0, 2:]) >= 0
+            flag = np.max(self.tableau.table[-1][:-1]) <= 0
+        return flag or iteration >= self.max_iter
+
+    @staticmethod
+    def basis_is_fine(basis):
+        for i in basis:
+            if list(basis).count(i) != 1:
+                return False
+        return True
+
+    def basis_is_valid(self, basis):
+        table: Tableau = self.tableau
+        columns = [x - 1 for x in list(basis.values())]
+        table.make_steps(list(basis.keys()), columns)
+        for i in basis.keys():
+            if table.table[i][basis[i] - 1] <= 0:
+                return False
+        return True

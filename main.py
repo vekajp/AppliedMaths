@@ -1,11 +1,16 @@
 from simplex import *
+from utils import *
 
-input_file = open("src/input.txt")
-output_file = open("src/out.txt", 'w')
-while input_file.readline():
-    obj_func = input_file.readline()
-    constraints = input_file.readline()
-    simplex = Simplex(constraints, obj_func)
-    x, ans = simplex.optimize()
-    output_file.write(str(x) + '\n')
-    output_file.write(str(ans) + '\n\n')
+parser = Parser("src/input.txt")
+tables = parser.get_tables()
+solver = SimplexSolver(verbose=False)
+count = 1
+for table in tables:
+    print("Task no", count)
+    print("+++++++++++++++++++++++++++")
+    result = solver.solve(table)
+    if result is not None:
+        print("f =", round(result[0], 3))
+        print("X = " + str(np.round(result[1], 3)) + ".T")
+    print("+++++++++++++++++++++++++++\n")
+    count += 1
